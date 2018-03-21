@@ -35,6 +35,8 @@ const drawRect = (rect, color) => {
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.stroke();
+    ctx.closePath();
+    ctx.fill();
 };
 
 const drawCircle = (c, color) => {
@@ -97,8 +99,9 @@ const objects = [
 ];
 
 document.addEventListener('mousedown', e => {
-    const rc = getRc(e.pageX, e.pageY, 80, 80);
-    rc.color = 'black';
+    const rc = getRc(e.pageX, e.pageY, 40, 40);
+    const r = () => Math.floor(Math.random() * 255);
+    rc.color = `rgba(${r()}, ${r()}, ${r()}, 0.5)`;
     objects.push(rc);
 });
 
@@ -131,12 +134,17 @@ const checkCollision = (bodyA, bodyB, axes) => {
 
 const collision = (rectA, rectB) => {
     const axes = [];
-    [rectA, rectB].forEach((p, i) => {
+    const v = normalize(sub(centroid(rectA.points), centroid(rectB.points)));
+    [rectA, rectB].forEach(p => {
         const pts = p.points;
         for (let i = 0; i < pts.length; i += 1) {
             const n = (i + 1) % pts.length;
             const a = normalize(sub(pts[i], pts[n]));
-            axes.push({ axis: vec(a.y, -a.x), id: i });
+            let normal = vec(a.y, -a.x);
+            if (dot(normal, v) < 0) {
+                normal = scale(normal, -1);
+            }
+            axes.push({ axis: normal });
         }
     });
     return checkCollision(rectA, rectB, axes);
@@ -185,19 +193,37 @@ setInterval(
                     if (a.fixed || b.fixed) {
                         const sgn = c.id === 0 ? 1 : -1;
                         if (a.fixed) {
-                            console.log('a', axis);
                             b.points = resolve(b.points, axis.axis, -sgn * penetration * s);
-                            b.vel = scale(b.vel, -0.5);
+                            const dt = dot(b.vel, axis.axis);
+                            if (dt < 0) {
+                                b.vel = add(b.vel, scale(axis.axis, -1.5 * dt));
+                            }
                         } else {
-                            console.log('b', axis);
                             a.vel = scale(a.vel, -0.5);
                             a.points = resolve(a.points, axis.axis, -sgn * penetration * s);
                         }
-                    } else if (axis.id === 0) {
-                        b.points = resolve(b.points, axis.axis, penetration * s);
                     } else {
-                        a.points = resolve(a.points, axis.axis, -penetration * s);
-                    }
+                        let mA = distance(a.vel, vec(0, 0)); 
+                        let mB = distance(b.vel, vec(0, 0)); 
+                        let tot = mA + mB;
+                        if (tot === 0) {
+                            mA = 0.5;
+                            mB = 0.5;
+                        } else {
+                            mA = mA / tot;
+                            mB = mB / tot;
+                        }
+                        const adt = dot(a.vel, axis.axis);
+                        if (adt > 0) {
+                            a.vel = add(a.vel, scale(axis.axis, -adt));
+                        }
+                        const bdt = dot(b.vel, axis.axis);
+                        if (bdt < 0) {
+                            b.vel = add(b.vel, scale(axis.axis, -bdt));
+                        }
+                        a.points = resolve(a.points, axis.axis, -mA * penetration * s);
+                        b.points = resolve(b.points, axis.axis, mB * penetration * s);
+                    } 
                 }
             }
         }
