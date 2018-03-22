@@ -98,11 +98,25 @@ const objects = [
     getRc(w / 2, h - fh / 2, w, fh, true),
 ];
 
+let down, cur;
 document.addEventListener('mousedown', e => {
-    const rc = getRc(e.pageX, e.pageY, 40, 40);
+    cur = down = vec(e.pageX, e.pageY);
+});
+
+document.addEventListener('mouseup', e => {
+    const up = vec(e.pageX, e.pageY);
+    const rc = getRc(down.x, down.y, 40, 40);
     const r = () => Math.floor(Math.random() * 255);
     rc.color = `rgba(${r()}, ${r()}, ${r()}, 0.5)`;
+    rc.vel = scale(sub(down, up), 0.05);
     objects.push(rc);
+    down = false;
+});
+
+document.addEventListener('mousemove', e => {
+    if (down) {
+        cur = vec(e.pageX, e.pageY);
+    }
 });
 
 const penetration = (axis, bodyA, bodyB) => {
@@ -180,6 +194,7 @@ setInterval(
         objects.forEach(d => {
             if (d.fixed) return;
             d.vel = add(d.vel, scale(vec(0, 1), 0.08));
+            d.vel = scale(d.vel, 0.99);
             d.points = resolve(d.points, d.vel, 1);
         });
         for (let i = 0; i < objects.length; i += 1) {
@@ -206,7 +221,7 @@ setInterval(
                         let mA = distance(a.vel, vec(0, 0)); 
                         let mB = distance(b.vel, vec(0, 0)); 
                         let tot = mA + mB;
-                        if (tot === 0) {
+                        if (true || tot === 0) {
                             mA = 0.5;
                             mB = 0.5;
                         } else {
@@ -234,6 +249,9 @@ setInterval(
         objects.forEach(d => {
             drawRect(d, d.color);
         });
+        if (down) {
+            drawLine(down, cur, 'green', 3);
+        }
     },
     20,
 );
