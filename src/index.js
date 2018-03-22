@@ -218,8 +218,8 @@ setInterval(
                             a.points = resolve(a.points, axis.axis, -sgn * penetration * s);
                         }
                     } else {
-                        let mA = distance(a.vel, vec(0, 0)); 
-                        let mB = distance(b.vel, vec(0, 0)); 
+                        let mA = distance(a.vel, vec(0, 0));
+                        let mB = distance(b.vel, vec(0, 0));
                         let tot = mA + mB;
                         if (true || tot === 0) {
                             mA = 0.5;
@@ -229,16 +229,13 @@ setInterval(
                             mB = mB / tot;
                         }
                         const adt = dot(a.vel, axis.axis);
-                        if (adt > 0) {
-                            a.vel = add(a.vel, scale(axis.axis, -adt));
-                        }
                         const bdt = dot(b.vel, axis.axis);
-                        if (bdt < 0) {
-                            b.vel = add(b.vel, scale(axis.axis, -bdt));
-                        }
+                        // swap the normal component of the velocities of a and b (since masses are equal)
+                        a.vel = add(a.vel, scale(axis.axis, -adt + bdt));
+                        b.vel = add(b.vel, scale(axis.axis, -bdt + adt));
                         a.points = resolve(a.points, axis.axis, -mA * penetration * s);
                         b.points = resolve(b.points, axis.axis, mB * penetration * s);
-                    } 
+                    }
                 }
             }
         }
