@@ -1,6 +1,6 @@
 
 import keys from './keys';
-import Rect from './shape';
+import { Rect } from './shape';
 
 import { centroid, distance, vec, sub, add, normalize, dot, intersect, getDistance, scale } from './math';
 
@@ -47,55 +47,17 @@ const drawCircle = (c, color) => {
     ctx.fill();
 };
 
-class Ball {
-    constructor(x, y, r) {
-        this.center = vec(x, y);
-        this.r = r;
-        this.vel = vec(0, 0);
-    }
-
-    project(axis) {
-        const mid = dot(axis, this.center);
-        return {
-            min: mid - this.r,
-            max: mid + this.r,
-        };
-    }
-}
-
-class Rect {
-    constructor(a, b, c, d, fixed) {
-        this.points = [a, b, c, d];
-        this.vel = vec(0, 0);
-        this.fixed = fixed;
-    }
-
-    project(axis) {
-        let l = 10000000;
-        let r = -10000000;
-        this.points.forEach((d) => {
-            const p = dot(axis, d);
-            l = Math.min(l, p);
-            r = Math.max(r, p);
-        });
-        return {
-            min: l,
-            max: r,
-        };
-    }
-}
-
-const getRc = (sx, sy, W, H, fixed = false) => {
+const getRc = (sx, sy, W, H, imass = 30) => {
     const a = vec(sx - W / 2, sy - H / 2);
     const b = vec(sx + W / 2, sy - H / 2);
     const c = vec(sx + W / 2, sy + H / 2);
     const d = vec(sx - W / 2, sy + H / 2);
-    return new Rect(a, b, c, d, fixed);
+    return new Rect(a, b, c, d, imass);
 };
 
 const fh = 30;
 const objects = [
-    getRc(w / 2, h - fh / 2, w, fh, true),
+    getRc(w / 2, h - fh / 2, w, fh, 0),
 ];
 
 let down, cur;
@@ -105,7 +67,7 @@ document.addEventListener('mousedown', e => {
 
 document.addEventListener('mouseup', e => {
     const up = vec(e.pageX, e.pageY);
-    const rc = getRc(down.x, down.y, 40, 40);
+    const rc = getRc(down.x, down.y, 40, 40, 30);
     const r = () => Math.floor(Math.random() * 255);
     rc.color = `rgba(${r()}, ${r()}, ${r()}, 0.5)`;
     rc.vel = scale(sub(down, up), 0.05);
@@ -192,7 +154,7 @@ setInterval(
         // rc.vel.y += 0.1;
         // rc.vel = scale(rc.vel, 0.99);
         objects.forEach(d => {
-            if (d.fixed) return;
+            if (d.imass === 0) return;
             d.vel = add(d.vel, scale(vec(0, 1), 0.08));
             d.vel = scale(d.vel, 0.99);
             d.points = resolve(d.points, d.vel, 1);
@@ -205,36 +167,25 @@ setInterval(
                 if (c) {
                     const { axis, penetration } = c;
                     const s = 1;
-                    if (a.fixed || b.fixed) {
-                        const sgn = c.id === 0 ? 1 : -1;
-                        if (a.fixed) {
-                            b.points = resolve(b.points, axis.axis, -sgn * penetration * s);
-                            const dt = dot(b.vel, axis.axis);
-                            if (dt < 0) {
-                                b.vel = add(b.vel, scale(axis.axis, -1.5 * dt));
-                            }
-                        } else {
-                            a.vel = scale(a.vel, -0.5);
-                            a.points = resolve(a.points, axis.axis, -sgn * penetration * s);
+                    const magA = a.imass === 0 ? 0 : (b.fixed ? 1 : 0.5);
+                    const magB = b.imass === 0 ? 0 : (a.fixed ? 1 : 0.5);
+                    const adt = dot(a.vel, axis.axis);
+                    const bdt = dot(b.vel, axis.axis);
+                    const vab = adt - bdt;
+                    const den = a.imass + b.imass;
+                    const e = 0.5;
+                    const Impulse = -(1 + e) * vab / den;
+                    if (a.imass > 0) {
+                        a.points = resolve(a.points, axis.axis, -magA * penetration * s);
+                        if (vab > 0) {
+                            a.vel = add(a.vel, scale(axis.axis, Impulse * a.imass));
                         }
-                    } else {
-                        let mA = distance(a.vel, vec(0, 0));
-                        let mB = distance(b.vel, vec(0, 0));
-                        let tot = mA + mB;
-                        if (true || tot === 0) {
-                            mA = 0.5;
-                            mB = 0.5;
-                        } else {
-                            mA = mA / tot;
-                            mB = mB / tot;
+                    }
+                    if (b.imass > 0) {
+                        b.points = resolve(b.points, axis.axis, magB * penetration * s);
+                        if (vab > 0) {
+                            b.vel = add(b.vel, scale(axis.axis, -Impulse * b.imass));
                         }
-                        const adt = dot(a.vel, axis.axis);
-                        const bdt = dot(b.vel, axis.axis);
-                        // swap the normal component of the velocities of a and b (since masses are equal)
-                        a.vel = add(a.vel, scale(axis.axis, -adt + bdt));
-                        b.vel = add(b.vel, scale(axis.axis, -bdt + adt));
-                        a.points = resolve(a.points, axis.axis, -mA * penetration * s);
-                        b.points = resolve(b.points, axis.axis, mB * penetration * s);
                     }
                 }
             }
