@@ -6,5 +6,15 @@
 #root {
     width: 100vw;
     height: 100vh;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
+}
+
+button {
+    padding: 10px;
+}
+
+#rem {
+    flex: 1;
 }

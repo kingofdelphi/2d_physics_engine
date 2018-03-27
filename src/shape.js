@@ -16,9 +16,9 @@ class Ball {
     }
 }
 
-class Rect {
-    constructor(a, b, c, d, imass) {
-        this.points = [a, b, c, d];
+class Poly {
+    constructor(points, imass) {
+        this.points = points;
         this.vel = vec(0, 0);
         this.imass = imass;
     }
@@ -38,4 +38,12 @@ class Rect {
     }
 }
 
-export { Rect, Ball };
+
+
+class Rect extends Poly {
+    constructor(a, b, c, d, imass) {
+        super([a, b, c, d], imass);
+    }
+}
+
+export { Poly, Rect, Ball };

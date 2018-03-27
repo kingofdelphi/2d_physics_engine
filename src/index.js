@@ -1,12 +1,43 @@
 
 import keys from './keys';
-import { Rect } from './shape';
+import { Poly, Rect } from './shape';
 
 import { centroid, distance, vec, sub, add, normalize, dot, intersect, getDistance, scale } from './math';
 
 import './styles.css';
 
-const root = document.getElementById('root');
+let ctr = 4;
+const incr = () => {
+    ctr += 1;
+};
+
+const decr = () => {
+    ctr = Math.max(3, ctr - 1);
+};
+
+document.getElementById('incr').addEventListener('click', incr);
+document.getElementById('decr').addEventListener('click', decr);
+
+let polyRadius = 50;
+
+const rsel = document.getElementById('radius');
+rsel.value = polyRadius;
+rsel.addEventListener('change', e => {
+    polyRadius = +e.target.value;
+});
+
+const createRegularPolygon = (origin, n, r = 30) => {
+    const ang = 2 * Math.PI / n;
+    const pts = [];
+    for (let i = 0; i < n; i += 1) {
+        const d = i * ang;
+        const c = 0;
+        pts.push(add(origin, scale(vec(Math.cos(d - c), Math.sin(d - c)), r)));
+    }
+    return pts;
+};
+
+const root = document.getElementById('rem');
 const w = root.clientWidth;
 const h = root.clientHeight;
 const canvas = document.getElementById('canvas');
@@ -26,12 +57,15 @@ const drawLine = (a, b, color = 'black', width = 1) => {
 const drawRect = (rect, color) => {
     ctx.fillStyle = color;
     ctx.beginPath();
-    const [a, b, c, d] = rect.points;
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.lineTo(c.x, c.y);
-    ctx.lineTo(d.x, d.y);
-    ctx.lineTo(a.x, a.y);
+    const pts = rect.points;
+    for (let i = 0; i <= pts.length; i += 1) {
+        const d = pts[i % pts.length];
+        if (i === 0) {
+            ctx.moveTo(d.x, d.y);
+        } else {
+            ctx.lineTo(d.x, d.y);
+        }
+    }
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.stroke();
@@ -47,7 +81,7 @@ const drawCircle = (c, color) => {
     ctx.fill();
 };
 
-const getRc = (sx, sy, W, H, imass = 30) => {
+const getRect = (sx, sy, W, H, imass = 30) => {
     const a = vec(sx - W / 2, sy - H / 2);
     const b = vec(sx + W / 2, sy - H / 2);
     const c = vec(sx + W / 2, sy + H / 2);
@@ -55,19 +89,25 @@ const getRc = (sx, sy, W, H, imass = 30) => {
     return new Rect(a, b, c, d, imass);
 };
 
+const getRc = (sx, sy, imass = 30) => {
+    return new Poly(createRegularPolygon(vec(sx, sy), ctr, polyRadius), imass);
+};
+
 const fh = 30;
 const objects = [
-    getRc(w / 2, h - fh / 2, w, fh, 0),
+    getRect(w / 2, h - fh / 2, w, fh, 0),
 ];
 
+const main = document.getElementById('rem');
 let down, cur;
-document.addEventListener('mousedown', e => {
-    cur = down = vec(e.pageX, e.pageY);
+main.addEventListener('mousedown', e => {
+    cur = down = vec(e.clientX, e.clientY);
 });
 
-document.addEventListener('mouseup', e => {
-    const up = vec(e.pageX, e.pageY);
-    const rc = getRc(down.x, down.y, 40, 40, 30);
+main.addEventListener('mouseup', e => {
+    const up = vec(e.clientX, e.clientY);
+    console.log(polyRadius);
+    const rc = getRc(down.x, down.y, polyRadius);
     const r = () => Math.floor(Math.random() * 255);
     rc.color = `rgba(${r()}, ${r()}, ${r()}, 0.5)`;
     rc.vel = scale(sub(down, up), 0.05);
@@ -77,7 +117,7 @@ document.addEventListener('mouseup', e => {
 
 document.addEventListener('mousemove', e => {
     if (down) {
-        cur = vec(e.pageX, e.pageY);
+        cur = vec(e.clientX, e.clientY);
     }
 });
 
@@ -132,74 +172,78 @@ const resolve = (points, axis, penetration) => {
     });
 };
 
-setInterval(
-    () => {
-        // if (keys['ArrowLeft']) {
-        //     rc.vel.x -= 0.2;
-        // }
-        // if (keys['ArrowRight']) {
-        //     rc.vel.x += 0.2;
-        // }
-        // if (keys[' ']) {
-        //     if (lcoll) {
-        //         rc.vel.y -= 8;
-        //     }
-        // }
-        // if (keys['ArrowUp']) {
-        //     rc.vel.y -= 0.2;
-        // }
-        // if (keys['ArrowDown']) {
-        //     rc.vel.y += 0.2;
-        // }
-        // rc.vel.y += 0.1;
-        // rc.vel = scale(rc.vel, 0.99);
-        objects.forEach(d => {
-            if (d.imass === 0) return;
-            d.vel = add(d.vel, scale(vec(0, 1), 0.08));
-            d.vel = scale(d.vel, 0.99);
-            d.points = resolve(d.points, d.vel, 1);
-        });
-        for (let i = 0; i < objects.length; i += 1) {
-            for (let j = i + 1; j < objects.length; j += 1) {
-                const a = objects[i];
-                const b = objects[j];
-                const c = collision(a, b);
-                if (c) {
-                    const { axis, penetration } = c;
-                    const s = 1;
-                    const magA = a.imass === 0 ? 0 : (b.fixed ? 1 : 0.5);
-                    const magB = b.imass === 0 ? 0 : (a.fixed ? 1 : 0.5);
-                    const adt = dot(a.vel, axis.axis);
-                    const bdt = dot(b.vel, axis.axis);
-                    const vab = adt - bdt;
-                    const den = a.imass + b.imass;
-                    const e = 0.5;
-                    const Impulse = -(1 + e) * vab / den;
-                    if (a.imass > 0) {
-                        a.points = resolve(a.points, axis.axis, -magA * penetration * s);
-                        if (vab > 0) {
-                            a.vel = add(a.vel, scale(axis.axis, Impulse * a.imass));
-                        }
+const update = () => {
+    // if (keys['ArrowLeft']) {
+    //     rc.vel.x -= 0.2;
+    // }
+    // if (keys['ArrowRight']) {
+    //     rc.vel.x += 0.2;
+    // }
+    // if (keys[' ']) {
+    //     if (lcoll) {
+    //         rc.vel.y -= 8;
+    //     }
+    // }
+    // if (keys['ArrowUp']) {
+    //     rc.vel.y -= 0.2;
+    // }
+    // if (keys['ArrowDown']) {
+    //     rc.vel.y += 0.2;
+    // }
+    // rc.vel.y += 0.1;
+    // rc.vel = scale(rc.vel, 0.99);
+    objects.forEach(d => {
+        if (d.imass === 0) return;
+        d.vel = add(d.vel, scale(vec(0, 1), 0.08));
+        d.vel = scale(d.vel, 0.99);
+        d.points = resolve(d.points, d.vel, 1);
+    });
+    for (let i = 0; i < objects.length; i += 1) {
+        for (let j = i + 1; j < objects.length; j += 1) {
+            const a = objects[i];
+            const b = objects[j];
+            const c = collision(a, b);
+            if (c) {
+                const { axis, penetration } = c;
+                const s = 1;
+                const magA = a.imass === 0 ? 0 : (b.fixed ? 1 : 0.5);
+                const magB = b.imass === 0 ? 0 : (a.fixed ? 1 : 0.5);
+                const adt = dot(a.vel, axis.axis);
+                const bdt = dot(b.vel, axis.axis);
+                const vab = adt - bdt;
+                const den = a.imass + b.imass;
+                const e = 0.5;
+                const Impulse = -(1 + e) * vab / den;
+                if (a.imass > 0) {
+                    a.points = resolve(a.points, axis.axis, -magA * penetration * s);
+                    if (vab > 0) {
+                        a.vel = add(a.vel, scale(axis.axis, Impulse * a.imass));
                     }
-                    if (b.imass > 0) {
-                        b.points = resolve(b.points, axis.axis, magB * penetration * s);
-                        if (vab > 0) {
-                            b.vel = add(b.vel, scale(axis.axis, -Impulse * b.imass));
-                        }
+                }
+                if (b.imass > 0) {
+                    b.points = resolve(b.points, axis.axis, magB * penetration * s);
+                    if (vab > 0) {
+                        b.vel = add(b.vel, scale(axis.axis, -Impulse * b.imass));
                     }
                 }
             }
         }
+    }
 
-        // render
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, w, h);
-        objects.forEach(d => {
-            drawRect(d, d.color);
-        });
-        if (down) {
-            drawLine(down, cur, 'green', 3);
-        }
-    },
-    20,
-);
+    // render
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, w, h);
+    objects.forEach(d => {
+        drawRect(d, d.color);
+    });
+    if (down) {
+        drawLine(down, cur, 'green', 3);
+    }
+};
+
+const callback = () => {
+    update();
+    window.requestAnimationFrame(callback);
+}
+
+callback();
