@@ -18,3 +18,7 @@ button {
 #rem {
     flex: 1;
 }
+
+.header {
+	background: silver;
+}

@@ -20,6 +20,7 @@ class Poly {
     constructor(points, imass) {
         this.points = points;
         this.vel = vec(0, 0);
+		this.angularVel = 0;
         this.imass = imass;
     }
 

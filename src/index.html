@@ -1,24 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
 
-<head>
-  <title>physics</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta charset="utf-8">
-</head>
+	<head>
+		<title>physics</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<meta charset="utf-8">
+	</head>
 
-<body>
-  <div id="root">
-    <div class='header'>
-      <button id='incr'>Incr</button>
-      <button id='decr'>Decr</button>
-      <input type="range" min="10" max="100" class="slider" id="radius">
+	<body>
+		<div id="root">
+			<div class='header'>
+				<input name="a" id="rect" type="radio" value="rect" checked>
+				<label for="rect">Rect</label>
+				<input name="a" id="poly" type="radio" value="poly">
+				<label for="poly">Polygon</label>
+				<input id="fixed" type="checkbox">
+				<label for="fixed">Fixed</label>
+				<button id='incr'>Incr</button>
+				<button id='decr'>Decr</button>
+				<input type="range" min="10" max="100" class="slider" id="radius">
 
-    </div>
-    <div id='rem'>
-      <canvas id="canvas"></canvas>
-    </div>
-  </div>
-</body>
+			</div>
+			<div id='rem'>
+				<canvas id="canvas"></canvas>
+			</div>
+		</div>
+	</body>
 
 </html>

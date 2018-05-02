@@ -93,3 +93,8 @@ export const scale = (v, f) => {
 
 export const vec = (x, y) => ({ x, y });
 
+export const rotateZ = (pt, angle) => {
+	const cs = Math.cos(angle);
+	const si = Math.sin(angle);
+	return vec(pt.x * cs - pt.y * si, pt.x * si + pt.y * cs);
+};

@@ -2,7 +2,7 @@
 import keys from './keys';
 import { Poly, Rect } from './shape';
 
-import { centroid, distance, vec, sub, add, normalize, dot, intersect, getDistance, scale } from './math';
+import { rotateZ, centroid, distance, vec, sub, add, normalize, dot, intersect, getDistance, scale } from './math';
 
 import './styles.css';
 
@@ -18,7 +18,7 @@ const decr = () => {
 document.getElementById('incr').addEventListener('click', incr);
 document.getElementById('decr').addEventListener('click', decr);
 
-let polyRadius = 50;
+let polyRadius = 30;
 
 const rsel = document.getElementById('radius');
 rsel.value = polyRadius;
@@ -31,7 +31,7 @@ const createRegularPolygon = (origin, n, r = 30) => {
     const pts = [];
     for (let i = 0; i < n; i += 1) {
         const d = i * ang;
-        const c = 0;
+        const c = Math.PI / 2;
         pts.push(add(origin, scale(vec(Math.cos(d - c), Math.sin(d - c)), r)));
     }
     return pts;
@@ -81,16 +81,18 @@ const drawCircle = (c, color) => {
     ctx.fill();
 };
 
-const getRect = (sx, sy, W, H, imass = 30) => {
+const getRect = (sx, sy, W, H, imass) => {
     const a = vec(sx - W / 2, sy - H / 2);
     const b = vec(sx + W / 2, sy - H / 2);
     const c = vec(sx + W / 2, sy + H / 2);
     const d = vec(sx - W / 2, sy + H / 2);
-    return new Rect(a, b, c, d, imass);
+	const rc = new Rect(a, b, c, d, imass);
+	rc.color = 'rgba(0, 0, 0, 0.3)';
+    return rc;
 };
 
-const getRc = (sx, sy, imass = 30) => {
-    return new Poly(createRegularPolygon(vec(sx, sy), ctr, polyRadius), imass);
+const getPoly = (sx, sy, radius, imass) => {
+    return new Poly(createRegularPolygon(vec(sx, sy), ctr, radius), imass);
 };
 
 const fh = 30;
@@ -104,146 +106,199 @@ main.addEventListener('mousedown', e => {
     cur = down = vec(e.clientX, e.clientY);
 });
 
+const getSelectedRadio = () =>
+	document.querySelector('input[name="a"]:checked').value;
+
+const isFixed = () =>
+	document.getElementById('fixed').checked;
+
 main.addEventListener('mouseup', e => {
     const up = vec(e.clientX, e.clientY);
-    console.log(polyRadius);
-    const rc = getRc(down.x, down.y, polyRadius);
     const r = () => Math.floor(Math.random() * 255);
-    rc.color = `rgba(${r()}, ${r()}, ${r()}, 0.5)`;
-    rc.vel = scale(sub(down, up), 0.05);
-    objects.push(rc);
-    down = false;
+	const sel = getSelectedRadio();
+	let rc;
+	const imass = isFixed() ? 0.0 : 10;
+	if (sel === 'rect') {
+		rc = getRect(down.x, down.y, polyRadius, polyRadius, imass);
+	} else {
+		rc = getPoly(down.x, down.y, polyRadius, imass);
+	}
+	rc.color = `rgba(${r()}, ${r()}, ${r()}, 0.5)`;
+	rc.vel = scale(sub(down, up), 0.05);
+	//rc.angularVel = Math.random() * 2;
+	objects.push(rc);
+	down = false;
 });
 
 document.addEventListener('mousemove', e => {
-    if (down) {
-        cur = vec(e.clientX, e.clientY);
-    }
+	if (down) {
+		cur = vec(e.clientX, e.clientY);
+	}
 });
 
 const penetration = (axis, bodyA, bodyB) => {
-    const a = bodyA.project(axis);
-    const b = bodyB.project(axis);
-    const l = Math.max(a.min, b.min);
-    const r = Math.min(a.max, b.max);
-    return l <= r ? r - l : 0;
+	const a = bodyA.project(axis);
+	const b = bodyB.project(axis);
+	const l = Math.max(a.min, b.min);
+	const r = Math.min(a.max, b.max);
+	return l <= r ? r - l : 0;
 };
 
 const checkCollision = (bodyA, bodyB, axes) => {
-    if (axes.length === 0) return false;
-    let minp = 9999999;
-    let paxis;
-    let coll = true;
-    axes.forEach(axis => {
-        const p = penetration(axis.axis, bodyA, bodyB);
-        if (p === 0) {
-            coll = false;
-        }
-        if (p < minp) {
-            minp = p;
-            paxis = axis;
-        }
-    });
-    if (!coll) return false;
-    return { axis: paxis, penetration: minp };
+	if (axes.length === 0) return false;
+	let minp = 9999999;
+	let paxis;
+	let coll = true;
+	axes.forEach(axis => {
+		if (!coll) return;
+		const p = penetration(axis.axis, bodyA, bodyB);
+		if (p === 0) {
+			coll = false;
+		}
+		if (p < minp) {
+			minp = p;
+			paxis = axis;
+		}
+	});
+	if (!coll) return false;
+	return { axis: paxis, penetration: minp };
 };
 
 const collision = (rectA, rectB) => {
-    const axes = [];
-    const v = normalize(sub(centroid(rectA.points), centroid(rectB.points)));
-    [rectA, rectB].forEach(p => {
-        const pts = p.points;
-        for (let i = 0; i < pts.length; i += 1) {
-            const n = (i + 1) % pts.length;
-            const a = normalize(sub(pts[i], pts[n]));
-            let normal = vec(a.y, -a.x);
-            if (dot(normal, v) < 0) {
-                normal = scale(normal, -1);
-            }
-            axes.push({ axis: normal });
-        }
-    });
-    return checkCollision(rectA, rectB, axes);
+	const axes = [];
+	const v = normalize(sub(centroid(rectA.points), centroid(rectB.points)));
+	[rectA, rectB].forEach(p => {
+		const pts = p.points;
+		for (let i = 0; i < pts.length; i += 1) {
+			const n = (i + 1) % pts.length;
+			const a = normalize(sub(pts[i], pts[n]));
+			let normal = vec(a.y, -a.x);
+			if (dot(normal, v) < 0) {
+				normal = scale(normal, -1);
+			}
+			axes.push({ axis: normal });
+		}
+	});
+	return checkCollision(rectA, rectB, axes);
 };
 
 const resolve = (points, axis, penetration) => {
-    return points.map(d => {
-        return add(d, scale(axis, penetration));
-    });
+	return points.map(d => {
+		return add(d, scale(axis, penetration));
+	});
 };
 
 const update = () => {
-    // if (keys['ArrowLeft']) {
-    //     rc.vel.x -= 0.2;
-    // }
-    // if (keys['ArrowRight']) {
-    //     rc.vel.x += 0.2;
-    // }
-    // if (keys[' ']) {
-    //     if (lcoll) {
-    //         rc.vel.y -= 8;
-    //     }
-    // }
-    // if (keys['ArrowUp']) {
-    //     rc.vel.y -= 0.2;
-    // }
-    // if (keys['ArrowDown']) {
-    //     rc.vel.y += 0.2;
-    // }
-    // rc.vel.y += 0.1;
-    // rc.vel = scale(rc.vel, 0.99);
-    objects.forEach(d => {
-        if (d.imass === 0) return;
-        d.vel = add(d.vel, scale(vec(0, 1), 0.08));
-        d.vel = scale(d.vel, 0.99);
-        d.points = resolve(d.points, d.vel, 1);
-    });
-    for (let i = 0; i < objects.length; i += 1) {
-        for (let j = i + 1; j < objects.length; j += 1) {
-            const a = objects[i];
-            const b = objects[j];
-            const c = collision(a, b);
-            if (c) {
-                const { axis, penetration } = c;
-                const s = 1;
-                const magA = a.imass === 0 ? 0 : (b.fixed ? 1 : 0.5);
-                const magB = b.imass === 0 ? 0 : (a.fixed ? 1 : 0.5);
-                const adt = dot(a.vel, axis.axis);
-                const bdt = dot(b.vel, axis.axis);
-                const vab = adt - bdt;
-                const den = a.imass + b.imass;
-                const e = 0.5;
-                const Impulse = -(1 + e) * vab / den;
-                if (a.imass > 0) {
-                    a.points = resolve(a.points, axis.axis, -magA * penetration * s);
-                    if (vab > 0) {
-                        a.vel = add(a.vel, scale(axis.axis, Impulse * a.imass));
-                    }
-                }
-                if (b.imass > 0) {
-                    b.points = resolve(b.points, axis.axis, magB * penetration * s);
-                    if (vab > 0) {
-                        b.vel = add(b.vel, scale(axis.axis, -Impulse * b.imass));
-                    }
-                }
-            }
-        }
-    }
+	const [____, rc] = objects;
+	let dx = 0, dy = 0;
+	const k = 1;
+	if (keys['ArrowLeft']) {
+	    dx -= k;
+	}
+	if (keys['ArrowRight']) {
+	    dx += k;
+	}
+	if (keys['ArrowUp']) {
+	    dy -= k;
+	}
+	if (keys['ArrowDown']) {
+	    dy += k;
+	}
+	objects.forEach(d => {
+		if (d.imass === 0) return;
+		const del = d === rc ? vec(dx, dy) : vec(0, 0);
+		// d.vel = add(d.vel, scale(vec(0, 1), 0.08));
+		d.angularVel *= 0.98;
+		d.vel = scale(d.vel, 0.99);
+		d.points = resolve(d.points, add(d.vel, del), 1);
+		const cent = centroid(d.points);
+		d.points = d.points.map(p => add(rotateZ(sub(cent, p), d.angularVel * 0.01), cent));
+	});
+	const touches = [];
+	for (let i = 0; i < objects.length; i += 1) {
+		for (let j = i + 1; j < objects.length; j += 1) {
+			const a = objects[i];
+			const b = objects[j];
+			const c = collision(a, b);
+			if (c) {
+				const { axis, penetration } = c;
+				const s = 1;
+				const magA = a.imass === 0 ? 0 : (b.fixed ? 1 : 0.5);
+				const magB = b.imass === 0 ? 0 : (a.fixed ? 1 : 0.5);
+				const adt = dot(a.vel, axis.axis);
+				const bdt = dot(b.vel, axis.axis);
+				const vab = adt - bdt;
+				const den = a.imass + b.imass;
+				const e = 0.5;
+				const Impulse = -(1 + e) * vab / den;
+				if (a.imass > 0) {
+					a.points = resolve(a.points, axis.axis, -magA * penetration * s);
+				}
+				if (b.imass > 0) {
+					b.points = resolve(b.points, axis.axis, magB * penetration * s);
+				}
+				// find the contacts between a and b
+				const projA = a.points.map(d => dot(d, axis.axis));
+				const projB = b.points.map(d => dot(d, axis.axis));
+				const aInfo = { min: Math.min(...projA), max: Math.max(...projA) };
+				const bInfo = { min: Math.min(...projB), max: Math.max(...projB) };
+				let touch;
+				// a is on the left as per convention as axis points from A's centroid to B's centroid
+				const pA = projA.map((d, i) => ({ d, i }))
+					.filter(d => d.d === aInfo.max);
+				const pB = projB.map((d, i) => ({ d, i }))
+					.filter(d => d.d === bInfo.min);
+				if (pA.length !== 2 || pB.length !== 2) {
+					touch = pA.length < pB.length ? a.points[pA[0].i] : b.points[pB[0].i];
+				}
+				// we need to ignore edge to edge intersection as it doesn't affect rotations
+				if (touch) {
+					touches.push(touch);
+					const ca = centroid(a.points);
+					const cb = centroid(b.points);
+					const ra = sub(ca, touch);
+					const rb = sub(cb, touch);
+					const imp = scale(axis.axis, Impulse);
+					const adw = (ra.x * imp.y - ra.y * imp.x) / dot(ra, ra);
+					const bdw = rb.x * -imp.y - rb.y * -imp.x / dot(rb, rb);
+					if (a.imass > 0) {
+						a.angularVel += adw;
+					}
+					if (b.imass > 0) {
+						b.angularVel += bdw;
+					}
+				}
+				if (a.imass > 0) {
+					if (vab > 0) {
+						a.vel = add(a.vel, scale(axis.axis, Impulse * a.imass));
+					}
+				}
+				if (b.imass > 0) {
+					if (vab > 0) {
+						b.vel = add(b.vel, scale(axis.axis, -Impulse * b.imass));
+					}
+				}
+			}
+		}
+	}
 
-    // render
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, w, h);
-    objects.forEach(d => {
-        drawRect(d, d.color);
-    });
-    if (down) {
-        drawLine(down, cur, 'green', 3);
-    }
+	// render
+	ctx.fillStyle = 'white';
+	ctx.fillRect(0, 0, w, h);
+	objects.forEach(d => {
+		drawRect(d, d.color);
+	});
+	if (down) {
+		drawLine(down, cur, 'green', 3);
+	}
+	touches.forEach(touch => {
+		drawCircle({ center: touch, radius: 2 }, 'blue');
+	});
 };
 
 const callback = () => {
-    update();
-    window.requestAnimationFrame(callback);
+	update();
+	window.requestAnimationFrame(callback);
 }
 
 callback();
