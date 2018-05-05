@@ -188,6 +188,39 @@ const resolve = (points, axis, penetration) => {
 	});
 };
 
+// axis is the minimum penetration axis, makes finding contact points easiser
+const getContactPoints = (bodyA, bodyB, axis) => {
+	// find the contacts between a and b
+	const projA = bodyA.points.map(d => dot(d, axis));
+	const projB = bodyB.points.map(d => dot(d, axis));
+	const aInfo = { min: Math.min(...projA), max: Math.max(...projA) };
+	const bInfo = { min: Math.min(...projB), max: Math.max(...projB) };
+	// a is on the left as per convention as axis points from A's centroid to B's centroid
+	const pA = projA.map((d, i) => ({ d, i }))
+		.filter(d => Math.abs(d.d - aInfo.max) < 1e-3);
+	const pB = projB.map((d, i) => ({ d, i }))
+		.filter(d => Math.abs(d.d - bInfo.min) < 1e-3);
+
+	const contactPoints = [];
+	// here we find if there was a point contact or an edge contact
+	if (pA.length !== 2 || pB.length !== 2) {
+		contactPoints.push(pA.length < pB.length ? bodyA.points[pA[0].i] : bodyB.points[pB[0].i]);
+	} else {
+		const per = vec(-axis.y, axis.x);
+		const F = (obj, pts) => obj.map(d => ({ pt: pts[d.i], dot: dot(pts[d.i], per) })).sort((a, b) => a.dot - b.dot);
+		let edgeA = F(pA, bodyA.points);
+		let edgeB = F(pB, bodyB.points);
+		if (edgeB[0].dot < edgeA[0].dot) {
+			[edgeA, edgeB] = [edgeB, edgeA];
+		}
+		const start = edgeB[0].pt;
+		const end = edgeA[1].dot < edgeB[1].dot ? edgeA[1].pt : edgeB[1].pt; 
+		contactPoints.push(start);
+		contactPoints.push(end);
+	}
+	return contactPoints;
+};
+
 const applyAngularImpulse = (body, contactPoints, impulseVector) => {
 	if (body.imass === 0) return;
 	const center = centroid(body.points);
@@ -198,6 +231,25 @@ const applyAngularImpulse = (body, contactPoints, impulseVector) => {
 		const dw = (r.x * impulseVector.y - r.y * impulseVector.x) / dot(r, r);
 		body.angularVel += dw;
 	});
+};
+
+const applyImpulse = (body, contactPoints, impulse, impulseDir) => {
+	const paxis = vec(impulseDir.y, -impulseDir.x);
+	applyAngularImpulse(body, contactPoints, scale(impulseDir, impulse));
+	// dynamic friction
+	body.vel = add(body.vel, scale(impulseDir, dot(body.vel, paxis) * (0.98 - 1)));
+	// add impulse
+	body.vel = add(body.vel, scale(impulseDir, impulse * body.imass));
+};
+
+const getLinearImpulse = (bodyA, bodyB, axis) => {
+	const adt = dot(bodyA.vel, axis);
+	const bdt = dot(bodyB.vel, axis);
+	const vab = adt - bdt;
+	const den = bodyA.imass + bodyB.imass;
+	const e = .5;
+	const impulse = vab > 0 ? -(1 + e) * vab / den : 0;
+	return impulse;
 };
 
 const update = () => {
@@ -231,72 +283,33 @@ const update = () => {
 		for (let j = i + 1; j < objects.length; j += 1) {
 			const a = objects[i];
 			const b = objects[j];
-			const c = collision(a, b);
-			if (c) {
-				const { axis, penetration } = c;
-				const s = 1;
+			const collisionInfo = collision(a, b);
+			if (!collisionInfo) continue;
+			const { axis, penetration } = collisionInfo;
+			// make the colliding objects just touching or remove penetration
+			const s = 1;
+			if (a.imass > 0) {
 				const magA = a.imass === 0 ? 0 : (b.fixed ? 1 : 0.5);
-				const magB = b.imass === 0 ? 0 : (a.fixed ? 1 : 0.5);
-				const adt = dot(a.vel, axis.axis);
-				const bdt = dot(b.vel, axis.axis);
-				const vab = adt - bdt;
-				const den = a.imass + b.imass;
-				const e = 0.5;
-				const Impulse = -(1 + e) * vab / den;
-				if (a.imass > 0) {
-					a.points = resolve(a.points, axis.axis, -magA * penetration * s);
-				}
-				if (b.imass > 0) {
-					b.points = resolve(b.points, axis.axis, magB * penetration * s);
-				}
-				// find the contacts between a and b
-				const projA = a.points.map(d => dot(d, axis.axis));
-				const projB = b.points.map(d => dot(d, axis.axis));
-				const aInfo = { min: Math.min(...projA), max: Math.max(...projA) };
-				const bInfo = { min: Math.min(...projB), max: Math.max(...projB) };
-				const contactPoints = [];
-				// a is on the left as per convention as axis points from A's centroid to B's centroid
-				const pA = projA.map((d, i) => ({ d, i }))
-					.filter(d => Math.abs(d.d - aInfo.max) < 1e-3);
-				const pB = projB.map((d, i) => ({ d, i }))
-					.filter(d => Math.abs(d.d - bInfo.min) < 1e-3);
-
-				// here we find if there was a point contact or an edge contact
-				if (pA.length !== 2 || pB.length !== 2) {
-					contactPoints.push(pA.length < pB.length ? a.points[pA[0].i] : b.points[pB[0].i]);
-				} else {
-					const per = vec(-axis.axis.y, axis.axis.x);
-					const F = (obj, pts) => obj.map(d => ({ pt: pts[d.i], dot: dot(pts[d.i], per) })).sort((a, b) => a.dot - b.dot);
-					let edgeA = F(pA, a.points);
-					let edgeB = F(pB, b.points);
-					if (edgeB[0].dot < edgeA[0].dot) {
-						[edgeA, edgeB] = [edgeB, edgeA];
-					}
-					const start = edgeB[0].pt;
-					const end = edgeA[1].dot < edgeB[1].dot ? edgeA[1].pt : edgeB[1].pt; 
-					contactPoints.push(start);
-					contactPoints.push(end);
-				}
-				touches.push(contactPoints);
-				const impulseVector = scale(axis.axis, Impulse);
-				const paxis = vec(-axis.axis.y, axis.axis.x);
-				if (a.imass > 0) {
-					applyAngularImpulse(a, contactPoints, impulseVector);
-					//dynamic friction
-					a.vel = add(a.vel, scale(paxis, dot(a.vel, paxis) * (0.98 - 1)));
-					if (vab > 0) {
-						a.vel = add(a.vel, scale(axis.axis, Impulse * a.imass));
-					}
-				}
-				if (b.imass > 0) {
-					applyAngularImpulse(b, contactPoints, scale(impulseVector, -1));
-					//dynamic friction
-					b.vel = add(b.vel, scale(paxis, dot(b.vel, paxis) * (0.98 - 1)));
-					if (vab > 0) {
-						b.vel = add(b.vel, scale(axis.axis, -Impulse * b.imass));
-					}
-				}
+				a.points = resolve(a.points, axis.axis, -magA * penetration * s);
 			}
+			if (b.imass > 0) {
+				const magB = b.imass === 0 ? 0 : (a.fixed ? 1 : 0.5);
+				b.points = resolve(b.points, axis.axis, magB * penetration * s);
+			}
+			const impulse = getLinearImpulse(a, b, axis.axis);
+			if (impulse < 0) {
+				const contactPoints = getContactPoints(a, b, axis.axis);
+				if (a.imass > 0) {
+					applyImpulse(a, contactPoints, impulse, axis.axis);
+				}
+				if (b.imass > 0) {
+					applyImpulse(b, contactPoints, impulse, scale(axis.axis, -1));
+				}
+
+				// ***for drawing***
+				touches.push(contactPoints);
+			}
+
 		}
 	}
 
