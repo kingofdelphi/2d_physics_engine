@@ -277,16 +277,21 @@ const update = () => {
 					contactPoints.push(start);
 					contactPoints.push(end);
 				}
-				contactPoints.push(...contactPoints);
+				touches.push(contactPoints);
 				const impulseVector = scale(axis.axis, Impulse);
+				const paxis = vec(-axis.axis.y, axis.axis.x);
 				if (a.imass > 0) {
 					applyAngularImpulse(a, contactPoints, impulseVector);
+					//dynamic friction
+					a.vel = add(a.vel, scale(paxis, dot(a.vel, paxis) * (0.98 - 1)));
 					if (vab > 0) {
 						a.vel = add(a.vel, scale(axis.axis, Impulse * a.imass));
 					}
 				}
 				if (b.imass > 0) {
 					applyAngularImpulse(b, contactPoints, scale(impulseVector, -1));
+					//dynamic friction
+					b.vel = add(b.vel, scale(paxis, dot(b.vel, paxis) * (0.98 - 1)));
 					if (vab > 0) {
 						b.vel = add(b.vel, scale(axis.axis, -Impulse * b.imass));
 					}
@@ -305,7 +310,11 @@ const update = () => {
 		drawLine(down, cur, 'green', 3);
 	}
 	touches.forEach(touch => {
-		drawCircle({ center: touch, radius: 2 }, 'blue');
+		if (touch.length === 1) {
+			drawCircle({ center: touch[0], radius: 2 }, 'blue');
+		} else {
+			drawLine(touch[0], touch[1], 'rgba(0, 0, 0, 0.5)', 4);
+		}
 	});
 };
 
