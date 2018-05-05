@@ -188,31 +188,43 @@ const resolve = (points, axis, penetration) => {
 	});
 };
 
+const applyAngularImpulse = (body, contactPoints, impulseVector) => {
+	if (body.imass === 0) return;
+	const center = centroid(body.points);
+	// TODO: distribute impulse uniformly across contact points
+	contactPoints.map(contactPoint => {
+		const r = sub(center, contactPoint);
+		// T = r * F = iW
+		const dw = (r.x * impulseVector.y - r.y * impulseVector.x) / dot(r, r);
+		body.angularVel += dw;
+	});
+};
+
 const update = () => {
 	const [____, rc] = objects;
 	let dx = 0, dy = 0;
 	const k = 1;
 	if (keys['ArrowLeft']) {
-	    dx -= k;
+		dx -= k;
 	}
 	if (keys['ArrowRight']) {
-	    dx += k;
+		dx += k;
 	}
 	if (keys['ArrowUp']) {
-	    dy -= k;
+		dy -= k;
 	}
 	if (keys['ArrowDown']) {
-	    dy += k;
+		dy += k;
 	}
 	objects.forEach(d => {
 		if (d.imass === 0) return;
 		const del = d === rc ? vec(dx, dy) : vec(0, 0);
-		// d.vel = add(d.vel, scale(vec(0, 1), 0.08));
+		d.vel = add(d.vel, scale(vec(0, 1), 0.08));
 		d.angularVel *= 0.98;
 		d.vel = scale(d.vel, 0.99);
 		d.points = resolve(d.points, add(d.vel, del), 1);
 		const cent = centroid(d.points);
-		d.points = d.points.map(p => add(rotateZ(sub(cent, p), d.angularVel * 0.01), cent));
+		d.points = d.points.map(p => add(rotateZ(sub(cent, p), d.angularVel), cent));
 	});
 	const touches = [];
 	for (let i = 0; i < objects.length; i += 1) {
@@ -242,38 +254,39 @@ const update = () => {
 				const projB = b.points.map(d => dot(d, axis.axis));
 				const aInfo = { min: Math.min(...projA), max: Math.max(...projA) };
 				const bInfo = { min: Math.min(...projB), max: Math.max(...projB) };
-				let touch;
+				const contactPoints = [];
 				// a is on the left as per convention as axis points from A's centroid to B's centroid
 				const pA = projA.map((d, i) => ({ d, i }))
-					.filter(d => d.d === aInfo.max);
+					.filter(d => Math.abs(d.d - aInfo.max) < 1e-3);
 				const pB = projB.map((d, i) => ({ d, i }))
-					.filter(d => d.d === bInfo.min);
+					.filter(d => Math.abs(d.d - bInfo.min) < 1e-3);
+
+				// here we find if there was a point contact or an edge contact
 				if (pA.length !== 2 || pB.length !== 2) {
-					touch = pA.length < pB.length ? a.points[pA[0].i] : b.points[pB[0].i];
-				}
-				// we need to ignore edge to edge intersection as it doesn't affect rotations
-				if (touch) {
-					touches.push(touch);
-					const ca = centroid(a.points);
-					const cb = centroid(b.points);
-					const ra = sub(ca, touch);
-					const rb = sub(cb, touch);
-					const imp = scale(axis.axis, Impulse);
-					const adw = (ra.x * imp.y - ra.y * imp.x) / dot(ra, ra);
-					const bdw = rb.x * -imp.y - rb.y * -imp.x / dot(rb, rb);
-					if (a.imass > 0) {
-						a.angularVel += adw;
+					contactPoints.push(pA.length < pB.length ? a.points[pA[0].i] : b.points[pB[0].i]);
+				} else {
+					const per = vec(-axis.axis.y, axis.axis.x);
+					const F = (obj, pts) => obj.map(d => ({ pt: pts[d.i], dot: dot(pts[d.i], per) })).sort((a, b) => a.dot - b.dot);
+					let edgeA = F(pA, a.points);
+					let edgeB = F(pB, b.points);
+					if (edgeB[0].dot < edgeA[0].dot) {
+						[edgeA, edgeB] = [edgeB, edgeA];
 					}
-					if (b.imass > 0) {
-						b.angularVel += bdw;
-					}
+					const start = edgeB[0].pt;
+					const end = edgeA[1].dot < edgeB[1].dot ? edgeA[1].pt : edgeB[1].pt; 
+					contactPoints.push(start);
+					contactPoints.push(end);
 				}
+				contactPoints.push(...contactPoints);
+				const impulseVector = scale(axis.axis, Impulse);
 				if (a.imass > 0) {
+					applyAngularImpulse(a, contactPoints, impulseVector);
 					if (vab > 0) {
 						a.vel = add(a.vel, scale(axis.axis, Impulse * a.imass));
 					}
 				}
 				if (b.imass > 0) {
+					applyAngularImpulse(b, contactPoints, scale(impulseVector, -1));
 					if (vab > 0) {
 						b.vel = add(b.vel, scale(axis.axis, -Impulse * b.imass));
 					}
