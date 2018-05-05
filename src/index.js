@@ -242,13 +242,22 @@ const applyImpulse = (body, contactPoints, impulse, impulseDir) => {
 	body.vel = add(body.vel, scale(impulseDir, impulse * body.imass));
 };
 
-const getLinearImpulse = (bodyA, bodyB, axis) => {
+const getLinearImpulse = (bodyA, bodyB, contactPoints, axis) => {
 	const adt = dot(bodyA.vel, axis);
 	const bdt = dot(bodyB.vel, axis);
 	const vab = adt - bdt;
-	const den = bodyA.imass + bodyB.imass;
-	const e = .5;
-	const impulse = vab > 0 ? -(1 + e) * vab / den : 0;
+	if (vab <= 0) return 0; // objects are already separating
+	const R = v => vec(v.y, -v.x);
+	const p = contactPoints.length === 1 ? contactPoints[0] : scale(add(...contactPoints), 0.5);
+	const centerA = centroid(bodyA.points);
+	const centerB = centroid(bodyB.points);
+	const ra = sub(centerA, p);
+	const rb = sub(centerB, p);
+	const da = dot(R(ra), axis);
+	const db = dot(R(rb), axis);
+	const den = bodyA.imass + bodyB.imass + da * da / dot(ra, ra) + db * db / dot(rb, rb);
+	const e = 0.55;
+	const impulse = -(1 + e) * vab / den;
 	return impulse;
 };
 
@@ -272,7 +281,7 @@ const update = () => {
 		if (d.imass === 0) return;
 		const del = d === rc ? vec(dx, dy) : vec(0, 0);
 		d.vel = add(d.vel, scale(vec(0, 1), 0.08));
-		d.angularVel *= 0.98;
+		d.angularVel *= 0.99;
 		d.vel = scale(d.vel, 0.99);
 		d.points = resolve(d.points, add(d.vel, del), 1);
 		const cent = centroid(d.points);
@@ -296,9 +305,9 @@ const update = () => {
 				const magB = b.imass === 0 ? 0 : (a.fixed ? 1 : 0.5);
 				b.points = resolve(b.points, axis.axis, magB * penetration * s);
 			}
-			const impulse = getLinearImpulse(a, b, axis.axis);
+			const contactPoints = getContactPoints(a, b, axis.axis);
+			const impulse = getLinearImpulse(a, b, contactPoints, axis.axis);
 			if (impulse < 0) {
-				const contactPoints = getContactPoints(a, b, axis.axis);
 				if (a.imass > 0) {
 					applyImpulse(a, contactPoints, impulse, axis.axis);
 				}
