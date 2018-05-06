@@ -102,8 +102,8 @@ const objects = [
 
 const main = document.getElementById('rem');
 let down, cur;
-main.addEventListener('mousedown', e => {
-    cur = down = vec(e.clientX, e.clientY);
+main.addEventListener('mousedown', function (e) {
+    cur = down = vec(e.clientX - this.offsetLeft, e.clientY - this.offsetTop);
 });
 
 const getSelectedRadio = () =>
@@ -112,28 +112,32 @@ const getSelectedRadio = () =>
 const isFixed = () =>
 	document.getElementById('fixed').checked;
 
-main.addEventListener('mouseup', e => {
-    const up = vec(e.clientX, e.clientY);
-    const r = () => Math.floor(Math.random() * 255);
+let freeform = [];
+const randomColor = () => Math.floor(Math.random() * 255);
+main.addEventListener('mouseup', function (e) {
+	const downPos = down;
+	down = false;
+	const up = vec(e.clientX - this.offsetLeft, e.clientY - this.offsetTop);
 	const sel = getSelectedRadio();
+	if (sel === 'freeform') {
+		freeform.push(up);
+		return;
+	}
 	let rc;
 	const imass = isFixed() ? 0.0 : 10;
 	if (sel === 'rect') {
-		rc = getRect(down.x, down.y, polyRadius, polyRadius, imass);
+		rc = getRect(downPos.x, downPos.y, polyRadius, polyRadius, imass);
 	} else {
-		rc = getPoly(down.x, down.y, polyRadius, imass);
+		rc = getPoly(downPos.x, downPos.y, polyRadius, imass);
 	}
-	rc.color = `rgba(${r()}, ${r()}, ${r()}, 0.5)`;
-	rc.vel = scale(sub(down, up), 0.05);
+	rc.color = `rgba(${randomColor()}, ${randomColor()}, ${randomColor()}, 0.5)`;
+	rc.vel = scale(sub(downPos, up), 0.05);
 	//rc.angularVel = Math.random() * 2;
 	objects.push(rc);
-	down = false;
 });
 
-document.addEventListener('mousemove', e => {
-	if (down) {
-		cur = vec(e.clientX, e.clientY);
-	}
+main.addEventListener('mousemove', function (e) {
+	cur = vec(e.clientX - this.offsetLeft, e.clientY - this.offsetTop);
 });
 
 const penetration = (axis, bodyA, bodyB) => {
@@ -265,6 +269,17 @@ const update = () => {
 	const [____, rc] = objects;
 	let dx = 0, dy = 0;
 	const k = 1;
+	if (keys['p']) {
+		if (freeform.length >= 3) {
+			const obj = new Poly(freeform, isFixed() ? 0 : 10);
+			obj.color = `rgba(${randomColor()}, ${randomColor()}, ${randomColor()}, 0.5)`;
+			objects.push(obj);
+		}
+		freeform = [];
+	}
+	if (keys['P']) {
+		freeform = [];
+	}
 	if (keys['ArrowLeft']) {
 		dx -= k;
 	}
@@ -330,6 +345,12 @@ const update = () => {
 	});
 	if (down) {
 		drawLine(down, cur, 'green', 3);
+	}
+	if (freeform.length > 0) {
+		for (let i = 1; i <= freeform.length; i += 1) {
+			const d = i === freeform.length ? cur : freeform[i];
+			drawLine(freeform[i - 1], d, i < freeform.length ? 'green' : 'red', 3);
+		}
 	}
 	touches.forEach(touch => {
 		if (touch.length === 1) {
