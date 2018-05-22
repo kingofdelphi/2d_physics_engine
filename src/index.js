@@ -1,8 +1,9 @@
 
 import keys from './keys';
-import { Poly, Rect } from './shape';
+import { Ball, Poly, Rect } from './shape';
 
-import { rotateZ, centroid, distance, vec, sub, add, normalize, dot, intersect, getDistance, scale } from './math';
+import { rotateZ, vec, sub, add, normalize, dot, intersect, getDistance, scale } from './math';
+import { applyImpulse, getContactPoints, getLinearImpulse, collision } from './collision';
 
 import './styles.css';
 
@@ -123,147 +124,24 @@ main.addEventListener('mouseup', function (e) {
 		freeform.push(up);
 		return;
 	}
-	let rc;
+	let body;
 	const imass = isFixed() ? 0.0 : 10;
-	if (sel === 'rect') {
-		rc = getRect(downPos.x, downPos.y, polyRadius, polyRadius, imass);
+	if (sel === 'circle') {
+		body = new Ball(downPos.x, downPos.y, polyRadius, imass);
+	} else if (sel === 'rect') {
+		body = getRect(downPos.x, downPos.y, polyRadius, polyRadius, imass);
 	} else {
-		rc = getPoly(downPos.x, downPos.y, polyRadius, imass);
+		body = getPoly(downPos.x, downPos.y, polyRadius, imass);
 	}
-	rc.color = `rgba(${randomColor()}, ${randomColor()}, ${randomColor()}, 0.5)`;
-	rc.vel = scale(sub(downPos, up), 0.05);
-	//rc.angularVel = Math.random() * 2;
-	objects.push(rc);
+	body.color = `rgba(${randomColor()}, ${randomColor()}, ${randomColor()}, 0.5)`;
+	body.vel = scale(sub(downPos, up), 0.05);
+	//body.angularVel = Math.random() * 2;
+	objects.push(body);
 });
 
 main.addEventListener('mousemove', function (e) {
 	cur = vec(e.clientX - this.offsetLeft, e.clientY - this.offsetTop);
 });
-
-const penetration = (axis, bodyA, bodyB) => {
-	const a = bodyA.project(axis);
-	const b = bodyB.project(axis);
-	const l = Math.max(a.min, b.min);
-	const r = Math.min(a.max, b.max);
-	return l <= r ? r - l : 0;
-};
-
-const checkCollision = (bodyA, bodyB, axes) => {
-	if (axes.length === 0) return false;
-	let minp = 9999999;
-	let paxis;
-	let coll = true;
-	axes.forEach(axis => {
-		if (!coll) return;
-		const p = penetration(axis.axis, bodyA, bodyB);
-		if (p === 0) {
-			coll = false;
-		}
-		if (p < minp) {
-			minp = p;
-			paxis = axis;
-		}
-	});
-	if (!coll) return false;
-	return { axis: paxis, penetration: minp };
-};
-
-const collision = (rectA, rectB) => {
-	const axes = [];
-	const v = normalize(sub(centroid(rectA.points), centroid(rectB.points)));
-	[rectA, rectB].forEach(p => {
-		const pts = p.points;
-		for (let i = 0; i < pts.length; i += 1) {
-			const n = (i + 1) % pts.length;
-			const a = normalize(sub(pts[i], pts[n]));
-			let normal = vec(a.y, -a.x);
-			if (dot(normal, v) < 0) {
-				normal = scale(normal, -1);
-			}
-			axes.push({ axis: normal });
-		}
-	});
-	return checkCollision(rectA, rectB, axes);
-};
-
-const resolve = (points, axis, penetration) => {
-	return points.map(d => {
-		return add(d, scale(axis, penetration));
-	});
-};
-
-// axis is the minimum penetration axis, makes finding contact points easiser
-const getContactPoints = (bodyA, bodyB, axis) => {
-	// find the contacts between a and b
-	const projA = bodyA.points.map(d => dot(d, axis));
-	const projB = bodyB.points.map(d => dot(d, axis));
-	const aInfo = { min: Math.min(...projA), max: Math.max(...projA) };
-	const bInfo = { min: Math.min(...projB), max: Math.max(...projB) };
-	// a is on the left as per convention as axis points from A's centroid to B's centroid
-	const pA = projA.map((d, i) => ({ d, i }))
-		.filter(d => Math.abs(d.d - aInfo.max) < 1e-3);
-	const pB = projB.map((d, i) => ({ d, i }))
-		.filter(d => Math.abs(d.d - bInfo.min) < 1e-3);
-
-	const contactPoints = [];
-	// here we find if there was a point contact or an edge contact
-	if (pA.length !== 2 || pB.length !== 2) {
-		contactPoints.push(pA.length < pB.length ? bodyA.points[pA[0].i] : bodyB.points[pB[0].i]);
-	} else {
-		const per = vec(-axis.y, axis.x);
-		const F = (obj, pts) => obj.map(d => ({ pt: pts[d.i], dot: dot(pts[d.i], per) })).sort((a, b) => a.dot - b.dot);
-		let edgeA = F(pA, bodyA.points);
-		let edgeB = F(pB, bodyB.points);
-		if (edgeB[0].dot < edgeA[0].dot) {
-			[edgeA, edgeB] = [edgeB, edgeA];
-		}
-		const start = edgeB[0].pt;
-		const end = edgeA[1].dot < edgeB[1].dot ? edgeA[1].pt : edgeB[1].pt; 
-		contactPoints.push(start);
-		contactPoints.push(end);
-	}
-	return contactPoints;
-};
-
-const applyAngularImpulse = (body, contactPoints, impulseVector) => {
-	if (body.imass === 0) return;
-	const center = centroid(body.points);
-	// TODO: distribute impulse uniformly across contact points
-	contactPoints.map(contactPoint => {
-		const r = sub(center, contactPoint);
-		// T = r * F = iW
-		const dw = (r.x * impulseVector.y - r.y * impulseVector.x) / dot(r, r);
-		body.angularVel += dw;
-	});
-};
-
-const applyImpulse = (body, contactPoints, impulse, impulseDir) => {
-	const paxis = vec(impulseDir.y, -impulseDir.x);
-	applyAngularImpulse(body, contactPoints, scale(impulseDir, impulse));
-	// dynamic friction
-	body.vel = add(body.vel, scale(impulseDir, dot(body.vel, paxis) * (0.98 - 1)));
-	// add impulse
-	body.vel = add(body.vel, scale(impulseDir, impulse * body.imass));
-};
-
-const getLinearImpulse = (bodyA, bodyB, contactPoints, axis) => {
-	const adt = dot(bodyA.vel, axis);
-	const bdt = dot(bodyB.vel, axis);
-	const vab = adt - bdt;
-	if (vab <= 0) return 0; // objects are already separating
-	const R = v => vec(v.y, -v.x);
-	const p = contactPoints.length === 1 ? contactPoints[0] : scale(add(...contactPoints), 0.5);
-	const centerA = centroid(bodyA.points);
-	const centerB = centroid(bodyB.points);
-	const ra = sub(centerA, p);
-	const rb = sub(centerB, p);
-	const da = dot(R(ra), axis);
-	const db = dot(R(rb), axis);
-	const den = bodyA.imass + bodyB.imass + da * da / dot(ra, ra) + db * db / dot(rb, rb);
-	const e = 0.55;
-	const impulse = -(1 + e) * vab / den;
-	return impulse;
-};
 
 const update = () => {
 	const [____, rc] = objects;
@@ -296,11 +174,13 @@ const update = () => {
 		if (d.imass === 0) return;
 		const del = d === rc ? vec(dx, dy) : vec(0, 0);
 		d.vel = add(d.vel, scale(vec(0, 1), 0.08));
-		d.angularVel *= 0.99;
 		d.vel = scale(d.vel, 0.99);
-		d.points = resolve(d.points, add(d.vel, del), 1);
-		const cent = centroid(d.points);
-		d.points = d.points.map(p => add(rotateZ(sub(cent, p), d.angularVel), cent));
+		d.angularVel *= 0.99;
+		d.translate(add(d.vel, del));
+		if (!d.circle) {
+			const cent = d.getCenter();
+			d.points = d.points.map(p => add(rotateZ(sub(cent, p), d.angularVel), cent));
+		}
 	});
 	const touches = [];
 	for (let i = 0; i < objects.length; i += 1) {
@@ -314,11 +194,11 @@ const update = () => {
 			const s = 1;
 			if (a.imass > 0) {
 				const magA = a.imass === 0 ? 0 : (b.fixed ? 1 : 0.5);
-				a.points = resolve(a.points, axis.axis, -magA * penetration * s);
+				a.translate(scale(axis.axis, -magA * penetration * s));
 			}
 			if (b.imass > 0) {
 				const magB = b.imass === 0 ? 0 : (a.fixed ? 1 : 0.5);
-				b.points = resolve(b.points, axis.axis, magB * penetration * s);
+				b.translate(scale(axis.axis, magB * penetration * s));
 			}
 			const contactPoints = getContactPoints(a, b, axis.axis);
 			const impulse = getLinearImpulse(a, b, contactPoints, axis.axis);
@@ -333,7 +213,6 @@ const update = () => {
 				// ***for drawing***
 				touches.push(contactPoints);
 			}
-
 		}
 	}
 
@@ -341,7 +220,11 @@ const update = () => {
 	ctx.fillStyle = 'white';
 	ctx.fillRect(0, 0, w, h);
 	objects.forEach(d => {
-		drawRect(d, d.color);
+		if (d.circle) {
+			drawCircle(d, d.color);
+		} else {
+			drawRect(d, d.color);
+		}
 	});
 	if (down) {
 		drawLine(down, cur, 'green', 3);

@@ -1,19 +1,28 @@
 import { centroid, distance, vec, sub, add, normalize, dot, intersect, getDistance, scale } from './math';
 
 class Ball {
-    constructor(x, y, r) {
+    constructor(x, y, radius, imass) {
+		this.circle = true;
         this.center = vec(x, y);
-        this.r = r;
+        this.radius = radius;
+		this.imass = imass;
+		this.angularVel = 0;
         this.vel = vec(0, 0);
     }
 
     project(axis) {
         const mid = dot(axis, this.center);
         return {
-            min: mid - this.r,
-            max: mid + this.r,
+            min: mid - this.radius,
+            max: mid + this.radius,
         };
     }
+	translate(axis) {
+		this.center = add(this.center, axis);
+	}
+	getCenter() {
+		return this.center;
+	}
 }
 
 class Poly {
@@ -37,6 +46,12 @@ class Poly {
             max: r,
         };
     }
+	translate(axis) {
+		this.points = this.points.map(pt => add(pt, axis));
+	}
+	getCenter() {
+		return centroid(this.points);
+	}
 }
 
 
