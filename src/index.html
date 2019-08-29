@@ -20,10 +20,18 @@
 				<label for="freeform">Freeform(p to finish or shift P to cancel)</label>
 				<input id="fixed" type="checkbox">
 				<label for="fixed">Fixed</label>
-				<button id='incr'>Incr</button>
-				<button id='decr'>Decr</button>
-				<input type="range" min="10" max="100" class="slider" id="radius">
-
+                <div class='edge-btns'>
+                    <label>Change Polygon Edge Count</label>
+                    <div class='btns'>
+                        <button id='incr'>Increase</button>
+                        <button id='decr'>Decrease</button>
+                    </div>
+                </div>
+                <div class='poly-size'>
+                    <label>Increase Polygon Size</label>
+                    <input type="range" min="10" max="100" class="slider" id="radius">
+                </div>
+                <label style='font-size:24px'>Use mouse down to spawn object</label>
 			</div>
 			<div id='rem'>
 				<canvas id="canvas"></canvas>

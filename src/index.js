@@ -101,6 +101,10 @@ const objects = [
     getRect(w / 2, h - fh / 2, w, fh, 0),
 ];
 
+for (let i = 0; i < 30; ++i) {
+    objects.push(getRect(w / 2 + (Math.random() * 20 - 10), (i - 30) * 20 + i * 10, 20, 20, 1));
+}
+
 const main = document.getElementById('rem');
 let down, cur;
 main.addEventListener('mousedown', function (e) {

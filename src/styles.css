@@ -22,3 +22,26 @@ button {
 .header {
 	background: silver;
 }
+
+.edge-btns {
+    display: inline-block;
+    border: 1px solid grey;
+    padding: 10px;
+}
+
+.edge-btns div {
+    margin-top: 10px;
+}
+
+.btns {
+    display: flex;
+    justify-content: space-between;
+}
+
+.poly-size {
+    display: inline-block;
+}
+
+.poly-size > * {
+    display: block;
+}
